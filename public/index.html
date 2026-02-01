@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Key Manager - Test UI</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .endpoint { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+        .response { background: #f5f5f5; padding: 10px; margin-top: 10px; white-space: pre-wrap; }
+        input, button { margin: 5px; padding: 5px; }
+        textarea { width: 100%; height: 100px; }
+    </style>
+</head>
+<body>
+    <h1>API Key Manager Test UI</h1>
+
+    <div class="endpoint">
+        <h3>GET /health</h3>
+        <button onclick="testHealth()">Test Health</button>
+        <div id="health-response" class="response"></div>
+    </div>
+
+    <div class="endpoint">
+        <h3>POST /api-keys</h3>
+        <label>Owner: <input type="text" id="create-owner" placeholder="e.g., my-service"></label><br>
+        <label>Scopes (comma-separated): <input type="text" id="create-scopes" placeholder="orders:read,inventory:write"></label><br>
+        <label>Expiration: <input type="datetime-local" id="create-expiration"></label><br>
+        <button onclick="createApiKey()">Create API Key</button>
+        <div id="create-response" class="response"></div>
+    </div>
+
+    <div class="endpoint">
+        <h3>GET /api-keys</h3>
+        <button onclick="listApiKeys()">List API Keys</button>
+        <div id="list-response" class="response"></div>
+    </div>
+
+    <div class="endpoint">
+        <h3>PATCH /api-keys/:id (Revoke) / DELETE /api-keys/:id (Soft Delete)</h3>
+        <label>Key ID: <input type="number" id="revoke-id" placeholder="1"></label><br>
+        <button onclick="revokeApiKey()">Revoke API Key</button>
+        <button onclick="deleteApiKey()">Soft Delete API Key</button>
+        <div id="revoke-response" class="response"></div>
+    </div>
+
+    <div class="endpoint">
+        <h3>POST /validate</h3>
+        <label>API Key: <input type="text" id="validate-key" placeholder="paste the API key"></label><br>
+        <label>Scope: <input type="text" id="validate-scope" placeholder="orders:read"></label><br>
+        <label>Service: <input type="text" id="validate-service" placeholder="order-service"></label><br>
+        <button onclick="validateApiKey()">Validate API Key</button>
+        <div id="validate-response" class="response"></div>
+    </div>
+
+    <div class="endpoint">
+        <h3>Consumer Integration Example</h3>
+        <p>This simulates how another service would use the API key management system.</p>
+        <label>API Key (from above): <input type="text" id="consumer-key" placeholder="paste API key"></label><br>
+        <label>Endpoint: 
+            <select id="consumer-endpoint">
+                <option value="/orders">GET /orders (requires orders:read)</option>
+                <option value="/inventory">POST /inventory (requires inventory:write)</option>
+            </select>
+        </label><br>
+        <button onclick="testConsumer()">Test Consumer Integration</button>
+        <div id="consumer-response" class="response"></div>
+        <p><strong>Instructions:</strong> This demonstrates the generic middleware. In a real service, you'd use the <code>validateApiKey</code> middleware from <code>example-consumer.js</code> to protect routes. <em>Note: To test this, first run <code>node example-consumer.js</code> in another terminal to start the consumer service on port 3001.</em></p>
+    </div>
+
+    <div class="endpoint">
+        <h3>GET /api-keys/:id/usage</h3>
+        <label>Key ID: <input type="number" id="usage-id" placeholder="1"></label><br>
+        <button onclick="getUsageAnalytics()">Get Usage Analytics</button>
+        <div id="usage-response" class="response"></div>
+    </div>
+
+    <script>
+        const baseUrl = '';
+
+        async function makeRequest(method, url, body = null) {
+            try {
+                const options = { method };
+                if (body) {
+                    options.headers = { 'Content-Type': 'application/json' };
+                    options.body = JSON.stringify(body);
+                }
+                const response = await fetch(url, options);
+                const data = await response.text();
+                return { status: response.status, data };
+            } catch (error) {
+                return { status: 'Error', data: error.message };
+            }
+        }
+
+        function displayResponse(elementId, response) {
+            const element = document.getElementById(elementId);
+            element.textContent = `Status: ${response.status}\n\n${response.data}`;
+        }
+
+        async function testHealth() {
+            const response = await makeRequest('GET', `${baseUrl}/health`);
+            displayResponse('health-response', response);
+        }
+
+        async function createApiKey() {
+            const owner = document.getElementById('create-owner').value;
+            const scopes = document.getElementById('create-scopes').value.split(',').map(s => s.trim()).filter(s => s);
+            const expiration = document.getElementById('create-expiration').value || undefined;
+
+            const body = { owner, scopes };
+            if (expiration) body.expiration = expiration + ':00Z'; // Add seconds and Z for ISO format
+
+            const response = await makeRequest('POST', `${baseUrl}/api-keys`, body);
+            displayResponse('create-response', response);
+        }
+
+        async function listApiKeys() {
+            const response = await makeRequest('GET', `${baseUrl}/api-keys`);
+            displayResponse('list-response', response);
+        }
+
+        async function revokeApiKey() {
+            const id = document.getElementById('revoke-id').value;
+            const response = await makeRequest('PATCH', `${baseUrl}/api-keys/${id}`, { status: 'revoked' });
+            displayResponse('revoke-response', response);
+        }
+
+        async function deleteApiKey() {
+            const id = document.getElementById('revoke-id').value;
+            const response = await makeRequest('DELETE', `${baseUrl}/api-keys/${id}`);
+            displayResponse('revoke-response', response);
+        }
+
+        async function validateApiKey() {
+            const apiKey = document.getElementById('validate-key').value;
+            const scope = document.getElementById('validate-scope').value;
+            const service = document.getElementById('validate-service').value;
+
+            const response = await makeRequest('POST', `${baseUrl}/validate`, { apiKey, scope, service });
+            displayResponse('validate-response', response);
+        }
+
+        async function testConsumer() {
+            const apiKey = document.getElementById('consumer-key').value;
+            const endpoint = document.getElementById('consumer-endpoint').value;
+
+            // Simulate consumer service call with Authorization header
+            const response = await fetch(`http://localhost:3001${endpoint}`, {
+                method: endpoint === '/inventory' ? 'POST' : 'GET',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.text();
+            displayResponse('consumer-response', { status: response.status, data: result });
+        }
+
+        async function getUsageAnalytics() {
+            const id = document.getElementById('usage-id').value;
+            const response = await makeRequest('GET', `${baseUrl}/api-keys/${id}/usage`);
+            displayResponse('usage-response', response);
+        }
+    </script>
+</body>
+</html>

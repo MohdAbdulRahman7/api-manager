@@ -1,0 +1,7 @@
+node_modules/
+dist/
+build/
+.cache/
+.vite/
+.env
+api_manager.db
